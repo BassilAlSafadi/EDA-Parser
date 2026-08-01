@@ -1,0 +1,16 @@
+# build artifacts and simulator working files
+build/
+work/
+transcript
+*.wlf
+*.vcd
+vsim.wlf
+modelsim.ini
+xsim.dir/
+*.jou
+*.log
+*.pb
+*.vvp
+
+# editor/agent local settings
+.claude/settings.local.json

@@ -1,0 +1,9 @@
+(ND_MODULE "half_adder_structural"
+  (ports
+    (ND_PORT "A" input)
+    (ND_PORT "B" input)
+    (ND_PORT "Sum" output)
+    (ND_PORT "Carry" output))
+  (items
+    (ND_GATE_INST xor "u1" ((ND_IDENT "Sum") (ND_IDENT "A") (ND_IDENT "B")))
+    (ND_GATE_INST and "u2" ((ND_IDENT "Carry") (ND_IDENT "A") (ND_IDENT "B")))))

@@ -1,0 +1,10 @@
+(ND_MODULE "counter"
+  (ports
+    (ND_PORT "clk" input)
+    (ND_PORT "rst" input)
+    (ND_PORT "q" output [(ND_BINARY - (ND_IDENT "WIDTH") (ND_LITERAL 32'd1)):(ND_LITERAL 32'd0)]))
+  (items
+    (ND_ALWAYS (ND_EVENT_EXPR (ND_EVENT_TERM posedge (ND_IDENT "clk")) (ND_EVENT_TERM posedge (ND_IDENT "rst")))
+      (ND_IF (ND_IDENT "rst")
+        (ND_NB_ASSIGN (ND_IDENT "q") (ND_LITERAL 32'd0))
+        (ND_NB_ASSIGN (ND_IDENT "q") (ND_BINARY + (ND_IDENT "q") (ND_LITERAL 32'd1)))))))

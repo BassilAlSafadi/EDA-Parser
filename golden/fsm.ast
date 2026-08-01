@@ -1,0 +1,26 @@
+(ND_MODULE "fsm"
+  (ports
+    (ND_PORT "clk" input)
+    (ND_PORT "rst" input)
+    (ND_PORT "x" input)
+    (ND_PORT "y" output))
+  (items
+    (ND_REG "state")
+    (ND_REG "next")
+    (ND_ALWAYS (ND_EVENT_EXPR (ND_EVENT_TERM posedge (ND_IDENT "clk")) (ND_EVENT_TERM posedge (ND_IDENT "rst")))
+      (ND_IF (ND_IDENT "rst")
+        (ND_NB_ASSIGN (ND_IDENT "state") (ND_LITERAL 1'd0))
+        (ND_NB_ASSIGN (ND_IDENT "state") (ND_IDENT "next"))))
+    (ND_ALWAYS @*
+      (ND_SEQ_BLOCK ""
+        (ND_CASE case (ND_IDENT "state")
+          (ND_CASE_ITEM ((ND_LITERAL 1'd0))
+            (ND_SEQ_BLOCK ""
+              (ND_BLK_ASSIGN (ND_IDENT "next") (ND_TERNARY (ND_IDENT "x") (ND_LITERAL 1'd1) (ND_LITERAL 1'd0)))
+              (ND_BLK_ASSIGN (ND_IDENT "y") (ND_LITERAL 1'd0))))
+          (ND_CASE_ITEM ((ND_LITERAL 1'd1))
+            (ND_SEQ_BLOCK ""
+              (ND_BLK_ASSIGN (ND_IDENT "next") (ND_LITERAL 1'd0))
+              (ND_BLK_ASSIGN (ND_IDENT "y") (ND_LITERAL 1'd1))))
+          (ND_CASE_ITEM default
+            (ND_BLK_ASSIGN (ND_IDENT "next") (ND_LITERAL 1'd0))))))))
