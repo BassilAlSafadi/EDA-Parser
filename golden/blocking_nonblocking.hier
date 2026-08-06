@@ -1,0 +1,7 @@
+(design "blocking_nonblocking"
+  (modules
+    (ND_MODULE "blocking_nonblocking" ports=3 params=0 insts=0 gates=0 refs=0))
+  (hierarchy
+    (inst "blocking_nonblocking" of "blocking_nonblocking" conns=0))
+  (paths
+    "blocking_nonblocking"))

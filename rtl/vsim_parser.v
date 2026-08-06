@@ -565,13 +565,16 @@ endfunction
 function automatic integer parse_gate_inst;
     input integer u;
     integer e, head, tail, n;
-    reg [7:0] gk;
+    reg [7:0]  gk;
+    reg [15:0] gl, gc;
     reg more;
     begin
         gk = cur_kind(0);
+        gl = tok_line[cur]; gc = tok_col[cur];
         ignore = eat_tok(0);                     // gate keyword
         n = new_node(`ND_GATE_INST);
         nd_op[n] = gk;
+        nd_line[n] = gl; nd_col[n] = gc;         // position for elaboration (§2)
         if (cur_kind(0) == `T_IDENT) begin
             nd_name[n] = tok_text[cur]; ignore = eat_tok(0);
         end
@@ -622,6 +625,9 @@ function automatic integer parse_mod_inst;
     begin
         n = new_node(`ND_MOD_INST);
         nd_name[n] = tok_text[cur];             // module name
+        // position of the module name: elaboration reports undefined modules,
+        // recursion and bad port connections here (§2 Task 5.1).
+        nd_line[n] = tok_line[cur]; nd_col[n] = tok_col[cur];
         ignore = eat_tok(0);
         // optional parameter override  #( ... )
         if (cur_kind(0) == `T_HASH) begin
@@ -1163,6 +1169,9 @@ function automatic integer parse_module;
     begin
         ignore = eat_tok(0);                     // module
         m = new_node(`ND_MODULE);
+        // position of the module name: elaboration diagnostics (duplicate
+        // definition, §2 Task 5.1) need a source location to point at.
+        nd_line[m] = tok_line[cur]; nd_col[m] = tok_col[cur];
         if (cur_kind(0) == `T_IDENT) begin nd_name[m] = tok_text[cur]; ignore = eat_tok(0); end
         else ignore = expect(`T_IDENT, "expected module name");
 

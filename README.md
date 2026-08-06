@@ -1,11 +1,13 @@
-# EDA Verilog Simulator — Phase 1 (Lexer + Parser)
+# EDA Verilog Simulator — Phase 1 (Lexer + Parser) and Phase 2 Task 5.1 (Elaboration)
 
 CSE215/CSE312 Electronic Design Automation, Ain Shams University (iCHEP).
 
 A simple EDA tool — a Verilog simulator — **written in Verilog**. This repository
 implements **Phase 1**: a hand-written scanner and recursive-descent parser that
-read a *target* Verilog file and build an arena-allocated AST. The full design
-specification is in [`Specification.md`](Specification.md).
+read a *target* Verilog file and build an arena-allocated AST; and **Phase 2,
+Task 5.1**: elaboration of that AST into a module table and a design hierarchy.
+The full design specification is in [`Specification.md`](Specification.md), and
+the elaboration deliverable is specified in [`Elaboration.md`](Elaboration.md).
 
 > **host** = the Verilog source of the tool itself (this repo), simulation-only
 > and non-synthesizable by design (spec §0.A). **target** = the Verilog file the
@@ -25,12 +27,16 @@ rtl/
   vsim_lexer.v     source load, comments, keywords, four-state numbers, ops (§3)
   vsim_parser.v    recursive descent + precedence climbing              (§4)
   vsim_dump.v      deterministic token + AST S-expression dumps         (§6, §8)
+  vsim_elab.v      module table, top discovery, instance tree   (Elaboration.md)
   vsim_top.v       plusarg handling and orchestration
 tb/
   tb_fourvalue.v   asserts the §2.2 truth table against native operators
   tb_lexer.v       maximal munch, divide-vs-comment, four-state literals
   tb_parser.v      COUT precedence tree (§5.2) and dangling-else binding
-golden/            six §10 target circuits + their .tokens / .ast goldens
+  tb_elab.v        module/instance tables, top discovery, cycles, bad ports
+golden/            six §10 target circuits + their .tokens / .ast / .hier goldens
+                   hier_ripple4.v  three-module two-level hierarchy + .hier
+                   bad_*.v         Task-5.1 negative cases (message-checked)
 run/
   run_modelsim.sh  build + test with ModelSim / Questa   (used here)
   run_xsim.sh      build + test with Vivado XSim         (course toolchain)
@@ -44,8 +50,9 @@ module (`vsim_top`, and each testbench) `` `include ``s the fragments, giving it
 its own private copy of the whole machine.
 
 ## Build & run
-Any one of the run scripts drives the full flow (compile → three testbenches →
-regenerate every golden `.tokens`/`.ast` and diff → arena-overflow check):
+Any one of the run scripts drives the full flow (compile → four testbenches →
+regenerate every golden `.tokens`/`.ast`/`.hier` and diff → Task-5.1 negative
+cases → arena- and instance-table-overflow checks):
 ```sh
 bash run/run_modelsim.sh     # ModelSim / Questa (verified)
 bash run/run_xsim.sh         # Vivado XSim
@@ -60,7 +67,14 @@ vsim -c -do "run -all; quit -f" vsim_top +src=golden/counter.v +dump_ast
 ```
 Plusargs: `+src=<file.v>` (required), `+dump_tokens [+tokout=<f>]`,
 `+dump_ast [+astout=<f>]`, `+nodecap=<N>` (artificially cap the node arena to
-demonstrate overflow). XSim uses `-testplusarg name[=value]` instead of `+name`.
+demonstrate overflow). Elaboration adds `+elab`, `+dump_hier [+hierout=<f>]`,
+`+top=<name>` (force the top module) and `+instcap=<N>` (cap the instance
+table). XSim uses `-testplusarg name[=value]` instead of `+name`.
+
+```sh
+# elaborate the ripple-carry adder and print its hierarchy
+vsim -c -do "run -all; quit -f" vsim_top +src=golden/hier_ripple4.v +dump_hier
+```
 
 ## Phase-1 acceptance (spec §9) — all passing
 | # | Criterion | Where verified |
@@ -85,5 +99,24 @@ demonstrate overflow). XSim uses `-testplusarg name[=value]` instead of `+name`.
   literal and every operator result are stored/compared directly — no aval/bval
   bit-planes (spec §2.2).
 
-Phases 2–6 (elaboration, evaluation, vectors, verification, report) are out of
-scope for this deliverable; see `Specification.md` §11.
+## Phase 2 acceptance — Task 5.1, Module Hierarchy Resolution
+Specified in [`Elaboration.md`](Elaboration.md); all passing.
+
+| # | Criterion | Where verified |
+|---|---|---|
+| 1 | the module table holds every definition, in declaration order | `tb_elab` |
+| 2 | the top module is the one nothing instantiates | `tb_elab`, every `.hier` golden |
+| 3 | instances are created at every level of the tree | `tb_elab`, `hier_ripple4.hier` |
+| 4 | parent-child links, source order and depths are correct | `tb_elab` |
+| 5 | one module instantiated twice gives two distinct instances | `tb_elab`, `hier_ripple4.hier` |
+| 6 | `+top=` overrides the deduced top and prunes the tree | `tb_elab`, run scripts |
+| 7 | an undefined instantiated module is a positioned error | `bad_undef_inst.v` |
+| 8 | an instantiation cycle is an error, and elaboration terminates | `bad_recursive.v` |
+| 9 | several candidate tops → warning, first declared is elaborated | `tb_elab` |
+| 10 | a named connection to a non-existent port is an error | `bad_conn.v` |
+| 11 | more connections than ports is an error | `tb_elab` |
+| 12 | exhausting the instance table is a loud error, not corruption | run with `+instcap` |
+
+Task 5.2 (signal/net tables and connection flattening) and Phases 3–6
+(evaluation, vectors, verification, report) are out of scope for this
+deliverable; see `Specification.md` §11 and `Elaboration.md` §6.

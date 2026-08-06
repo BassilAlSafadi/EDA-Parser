@@ -28,6 +28,15 @@
 `ifndef MAX_DIAG
   `define MAX_DIAG  64              // diagnostics
 `endif
+// Elaboration capacities (Phase 2, Task 5.1).  Guarded like the arenas above
+// so a testbench can shrink one and exercise the overflow path.
+`ifndef MAX_MODS
+  `define MAX_MODS  64              // distinct module definitions
+`endif
+`ifndef MAX_INST
+  `define MAX_INST  1024            // elaborated instances in the hierarchy
+`endif
+
 `define MAX_IDENT  32               // identifier chars
 `define IDW        256              // identifier bit width = MAX_IDENT*8
 `define VALW       64               // max literal width
