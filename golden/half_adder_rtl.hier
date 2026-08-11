@@ -1,0 +1,7 @@
+(design "half_adder_rtl"
+  (modules
+    (ND_MODULE "half_adder_rtl" ports=4 params=0 insts=0 gates=0 refs=0))
+  (hierarchy
+    (inst "half_adder_rtl" of "half_adder_rtl" conns=0))
+  (paths
+    "half_adder_rtl"))

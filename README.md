@@ -32,6 +32,8 @@ tests/
   test_lexer.cpp   maximal munch, divide-vs-comment, four-state literals
   test_parser.cpp  COUT precedence tree (§5.2) and dangling-else binding
 golden/            six §10 target circuits + their .tokens / .ast goldens
+                   (plus Task-5.1 elaboration fixtures kept for later
+                   reference — see "About Phase 2" below)
 run/
   run_cpp.sh     configure + build + test + golden-diff + overflow check
 CMakeLists.txt
@@ -99,5 +101,19 @@ to exercise, so `tb_fourvalue.v` was not ported.
 - **Four-value logic** is no longer free (see above); `FourState` provides
   exactly what §2.2/§3.5 require and nothing more.
 
-Phases 2–6 (elaboration, evaluation, vectors, verification, report) are out of
-scope for this deliverable; see `Specification.md` §11.
+## About Phase 2 (Task 5.1, elaboration)
+A Verilog implementation of Task 5.1 (module hierarchy resolution —
+`rtl/vsim_elab.v`, `tb/tb_elab.v`, and the `tools/` Python goldens/checker)
+existed on `main` before this C++ migration, specified in
+[`Elaboration.md`](Elaboration.md) with [`Signal_Resolution.md`](Signal_Resolution.md)
+describing the next task. It depended entirely on the Verilog host fragments
+removed in this migration, so it was removed along with them rather than left
+in a non-building state. Both design docs and the `golden/*.hier`,
+`golden/bad_*.v`, and `golden/hier_ripple4.*` fixtures were kept, since they
+still describe the elaboration algorithm and its expected output precisely —
+useful as a reference if/when Task 5.1 is ported to C++ on top of this Phase 1
+host. The original Verilog implementation remains recoverable from git history
+(commit `ba841f9`).
+
+Phases 3–6 (evaluation, vectors, verification, report) are out of scope for
+this deliverable; see `Specification.md` §11.
