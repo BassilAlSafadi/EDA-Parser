@@ -2,88 +2,102 @@
 
 CSE215/CSE312 Electronic Design Automation, Ain Shams University (iCHEP).
 
-A simple EDA tool — a Verilog simulator — **written in Verilog**. This repository
+A simple EDA tool — a Verilog simulator — **written in C++**. This repository
 implements **Phase 1**: a hand-written scanner and recursive-descent parser that
 read a *target* Verilog file and build an arena-allocated AST. The full design
 specification is in [`Specification.md`](Specification.md).
 
-> **host** = the Verilog source of the tool itself (this repo), simulation-only
-> and non-synthesizable by design (spec §0.A). **target** = the Verilog file the
-> tool reads and parses.
+> **host** = the C++ source of the tool itself (this repo). **target** = the
+> Verilog file the tool reads and parses.
 
-## Why non-synthesizable is correct
-The tool uses `$fopen`/`$fgetc`/`$fdisplay`, unbounded loops and recursive
-`automatic` subprograms — none synthesizable. It is a *program that runs inside a
-simulator*, not a circuit (spec §0.A).
+The tool was originally implemented in Verilog itself (simulation-only,
+non-synthesizable), as a deliberate demonstration that the host language need
+not be the target language (spec §0.A). It has since been migrated to C++
+with the exact same algorithms and output format — every golden
+`.tokens`/`.ast` fixture is unchanged and still matches byte-for-byte.
 
 ## Layout
 ```
-rtl/
-  vsim_defs.vh     capacities, token kinds, keyword codes, node kinds  (§2.1, §3.2, §5.1)
-  vsim_arena.v     arenas + new_node + identifier/char helpers          (§2)
-  vsim_diag.v      diagnostic collection, sorting, printing             (§7)
-  vsim_lexer.v     source load, comments, keywords, four-state numbers, ops (§3)
-  vsim_parser.v    recursive descent + precedence climbing              (§4)
-  vsim_dump.v      deterministic token + AST S-expression dumps         (§6, §8)
-  vsim_top.v       plusarg handling and orchestration
-tb/
-  tb_fourvalue.v   asserts the §2.2 truth table against native operators
-  tb_lexer.v       maximal munch, divide-vs-comment, four-state literals
-  tb_parser.v      COUT precedence tree (§5.2) and dangling-else binding
+src/
+  defs.hpp       capacities, token kinds, keyword codes, node kinds  (§2.1, §3.2, §5.1)
+  four_state.hpp four-state (0/1/x/z) literal value type              (§2.2)
+  vsim.hpp       the Vsim class: arenas + every method declaration
+  arena.cpp      arenas + new_node + identifier/char helpers          (§2)
+  diag.cpp       diagnostic collection, sorting, printing             (§7)
+  lexer.cpp      source load, comments, keywords, four-state numbers, ops (§3)
+  parser.cpp     recursive descent + precedence climbing              (§4)
+  dump.cpp       deterministic token + AST S-expression dumps         (§6, §8)
+  main.cpp       CLI argument handling and orchestration
+tests/
+  test_lexer.cpp   maximal munch, divide-vs-comment, four-state literals
+  test_parser.cpp  COUT precedence tree (§5.2) and dangling-else binding
 golden/            six §10 target circuits + their .tokens / .ast goldens
 run/
-  run_modelsim.sh  build + test with ModelSim / Questa   (used here)
-  run_xsim.sh      build + test with Vivado XSim         (course toolchain)
-  run_iverilog.sh  build + test with Icarus Verilog
+  run_cpp.sh     configure + build + test + golden-diff + overflow check
+CMakeLists.txt
 ```
 
-### Single-module design
-Verilog functions may only touch variables in their own module scope, so the
-arenas and every subprogram that walks them must share one module. Each top
-module (`vsim_top`, and each testbench) `` `include ``s the fragments, giving it
-its own private copy of the whole machine.
-
 ## Build & run
-Any one of the run scripts drives the full flow (compile → three testbenches →
-regenerate every golden `.tokens`/`.ast` and diff → arena-overflow check):
+Requires a C++17 compiler and CMake. On this machine there is no `g++` on
+PATH but MSVC (Visual Studio 2022 Community) is installed, and CMake was
+installed user-locally via `pip install --user cmake` (no admin rights
+needed). Any CMake + any C++17 compiler works elsewhere.
+
 ```sh
-bash run/run_modelsim.sh     # ModelSim / Questa (verified)
-bash run/run_xsim.sh         # Vivado XSim
-bash run/run_iverilog.sh     # Icarus Verilog
+bash run/run_cpp.sh      # configure, build, run both unit tests, diff every
+                          # golden fixture, and exercise the overflow path
 ```
 
 Run the tool directly on a target file:
 ```sh
-# ModelSim
-vlog +incdir+rtl rtl/vsim_top.v
-vsim -c -do "run -all; quit -f" vsim_top +src=golden/counter.v +dump_ast
+cmake -S . -B build -G "Visual Studio 17 2022"
+cmake --build build --config Release
+build/Release/vsim.exe +src=golden/counter.v +dump_ast
 ```
-Plusargs: `+src=<file.v>` (required), `+dump_tokens [+tokout=<f>]`,
+Flags (kept identical to the original Verilog host's plusarg syntax):
+`+src=<file.v>` (required), `+dump_tokens [+tokout=<f>]`,
 `+dump_ast [+astout=<f>]`, `+nodecap=<N>` (artificially cap the node arena to
-demonstrate overflow). XSim uses `-testplusarg name[=value]` instead of `+name`.
+demonstrate overflow).
 
 ## Phase-1 acceptance (spec §9) — all passing
 | # | Criterion | Where verified |
 |---|---|---|
 | 1 | §10 circuits scan & parse with zero diagnostics | run script golden pass |
 | 2 | Each AST dump matches its golden | run script `.ast` diff |
-| 3 | `COUT=(A&B)|(A&CIN)|(B&CIN)` builds the §5.2 tree | `tb_parser` |
-| 4 | §2.2 four-value table matches native operators | `tb_fourvalue` |
-| 5 | `===` is one token; `= = =` is three (maximal munch) | `tb_lexer` |
-| 6 | `a / b` is three tokens; `a // b` is one + comment | `tb_lexer` |
-| 7 | dangling `else` binds to the inner `if` | `tb_parser` |
-| 8 | `4'b1x0z` reads back `1x0z`; `8'hFF` extends per §3.5 | `tb_lexer` |
+| 3 | `COUT=(A&B)|(A&CIN)|(B&CIN)` builds the §5.2 tree | `test_parser` |
+| 4 | §2.2 four-value table matches native operators | N/A in C++ (see note below) |
+| 5 | `===` is one token; `= = =` is three (maximal munch) | `test_lexer` |
+| 6 | `a / b` is three tokens; `a // b` is one + comment | `test_lexer` |
+| 7 | dangling `else` binds to the inner `if` | `test_parser` |
+| 8 | `4'b1x0z` reads back `1x0z`; `8'hFF` extends per §3.5 | `test_lexer` |
 | 9 | a missing `;` yields a positioned diagnostic + recovery | run on a bad file |
 | 10 | exhausting an arena is a loud error, not corruption | run with `+nodecap` |
 
-## Notes on host-language choices (spec §12 risks)
-- **Recursion**: recursive `automatic` functions are used (verified on ModelSim
-  2020.1); the explicit-stack fallback was not needed.
-- **Verilog-2001 functions require ≥1 input**: the cursor-driven parse helpers
-  therefore carry a dummy input and are called with `0`.
-- **Four-value logic is free**: a host `reg` is natively 0/1/x/z, so a target
-  literal and every operator result are stored/compared directly — no aval/bval
-  bit-planes (spec §2.2).
+### On criterion 4 and the four-state type
+The original Verilog host's `tb_fourvalue.v` verified that a *host* `reg` bit
+is natively four-state, so the host's own `==`, `===`, `!=`, `!==`, `&`, `&&`,
+`|`, `||`, `^` already produced the §2.2 truth table for free. C++ has no
+native four-state type, but the tool was never asked to *evaluate* those
+operators on target values in the first place — it only lexes and prints
+target literal bits (§3.5, §9.8). `src/four_state.hpp` hand-implements exactly
+the operations the scanner and dumper actually perform (shift-and-insert,
+uniform x/z fill, per-bit read), verified instead by `test_lexer`'s literal
+round-trip checks (criterion 8). There is nothing here for a truth-table test
+to exercise, so `tb_fourvalue.v` was not ported.
+
+## Notes on host-language choices
+- **Recursion**: the parser is ordinary C++ recursion (the Verilog host
+  needed `automatic` functions specifically because Verilog-2001 functions
+  take only inputs, spec §2.6 — that constraint doesn't exist here).
+- **Identifiers**: stored as `std::string` rather than the original's
+  fixed-width packed bit vector. The one behavioral detail preserved
+  deliberately: an identifier longer than `MAX_IDENT` (32) characters still
+  keeps only its *last* 32 characters, matching the original's
+  `acc = (acc << 8) | ch` accumulator, which silently drops the earliest
+  bytes once it saturates — the "identifier exceeds MAX_IDENT chars"
+  diagnostic still fires either way.
+- **Four-value logic** is no longer free (see above); `FourState` provides
+  exactly what §2.2/§3.5 require and nothing more.
 
 Phases 2–6 (elaboration, evaluation, vectors, verification, report) are out of
 scope for this deliverable; see `Specification.md` §11.

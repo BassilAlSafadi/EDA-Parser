@@ -1,7 +1,9 @@
 # EDA Verilog Simulator — Implementation Specification
 
 CSE215/CSE312 Electronic Design Automation, Ain Shams University (iCHEP).
-Major task: a simple EDA tool (Verilog simulator), **implemented in Verilog**.
+Major task: a simple EDA tool (Verilog simulator), **implemented in C++**
+(originally implemented in Verilog itself; migrated to C++ with identical
+algorithms and output format, see README.md).
 
 **This document is self-contained.** It is the complete input for implementing Phase 1 (lexer and
 parser) and defines the data representations Phases 2 and 3 depend on.
@@ -10,15 +12,15 @@ parser) and defines the data representations Phases 2 and 3 depend on.
 
 ## Terminology — read this first
 
-Two different Verilogs appear throughout. They are never interchangeable.
+Two different languages appear throughout. They are never interchangeable.
 
 | Term | Meaning |
 |---|---|
-| **host** | The Verilog source code *of the tool itself*. Simulation-only, non-synthesizable. |
+| **host** | The C++ source code *of the tool itself* (originally Verilog; see README.md). |
 | **target** | The Verilog source code the tool *reads and parses*. The DUT. |
 
-"The host lexer reads target characters" = the tool (written in Verilog) reads the file being
-analysed (also Verilog). Where ambiguity is possible, the words *host* and *target* are used
+"The host lexer reads target characters" = the tool (written in C++) reads the file being
+analysed (which is Verilog). Where ambiguity is possible, the words *host* and *target* are used
 explicitly.
 
 ---
@@ -38,23 +40,22 @@ explicitly.
 
 | # | Decision | Value |
 |---|---|---|
-| 0.1 | Host language | **Verilog (IEEE 1364-2001)**, simulation-only, non-synthesizable |
-| 0.2 | Host simulator | Vivado XSim (course toolchain). Keep Icarus Verilog compatible if possible |
+| 0.1 | Host language | **C++17** (originally Verilog (IEEE 1364-2001), simulation-only, non-synthesizable — see README.md for the migration) |
+| 0.2 | Host build | CMake + any C++17 compiler (MSVC verified). Originally targeted Vivado XSim as host simulator |
 | 0.3 | Parser generator | None — hand-written scanner and recursive-descent parser |
-| 0.4 | Memory model | Arena allocation: fixed-capacity arrays, integer indices as node handles |
-| 0.5 | Recursion | `automatic` functions (LRM §10.4.2). Fall back to an explicit stack array if the simulator misbehaves |
+| 0.4 | Memory model | Arena allocation: fixed-capacity arrays (`std::vector`, pre-sized), integer indices as node handles |
+| 0.5 | Recursion | Ordinary C++ function recursion (originally `automatic` Verilog functions, LRM §10.4.2, needed only because Verilog-2001 functions take inputs only) |
 | 0.6 | Test-vector source | Separate vector file; the tool parses the target DUT only |
 | 0.7 | Error policy | Collect all diagnostics in an array, print sorted, set a failure flag |
 
-### 0.A Why non-synthesizable is correct here, and must be stated
+### 0.A History: why non-synthesizable Verilog was originally correct
 
-The tool uses `$fopen`, `$fgetc`, `$fdisplay`, unbounded loops, and `automatic` recursion. None of
-these are synthesizable — they exist only in simulation. This is not a defect. The tool is a
-*program that runs inside a simulator*, not a circuit.
-
-Say this explicitly in the report. It anticipates the obvious challenge ("your EDA tool can't be
-synthesized") and shows you understand the distinction between the synthesizable subset
-(05 *HDL Coding Techniques*, which is about writing hardware) and full Verilog.
+The tool was originally written in Verilog itself, using `$fopen`, `$fgetc`, `$fdisplay`,
+unbounded loops, and `automatic` recursion — none of which are synthesizable. That was not a
+defect: the tool was a *program that ran inside a simulator*, not a circuit, and demonstrated the
+distinction between the synthesizable subset (05 *HDL Coding Techniques*) and full Verilog. It has
+since been migrated to C++ (decision 0.1); this section is kept as project history since the
+target-language recognition rules below (§2–§9) are unchanged by the host-language swap.
 
 ### 0.B Why the DUT-only default (0.6)
 
@@ -83,5 +84,5 @@ Phase 1 is done when §9 passes.
 
 *(This file is the task specification as provided. The full data-representation, lexer, parser,
 AST-encoding, dump, diagnostics, testing and acceptance sections — §2 through §12 — are the
-authoritative reference the `rtl/`, `tb/`, `golden/` and `run/` implementations follow, and are
+authoritative reference the `src/`, `tests/`, `golden/` and `run/` implementations follow, and are
 cited by section number throughout the source. See `README.md` for the Phase-1 acceptance matrix.)*

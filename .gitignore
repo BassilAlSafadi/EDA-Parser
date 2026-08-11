@@ -12,5 +12,13 @@ xsim.dir/
 *.pb
 *.vvp
 
+# CMake / MSVC build trees (in case CMake is pointed elsewhere)
+out/
+CMakeFiles/
+CMakeCache.txt
+*.obj
+*.ilk
+*.pdb
+
 # editor/agent local settings
 .claude/settings.local.json
