@@ -177,5 +177,12 @@ constexpr Kind EDGE_NEG  = 2;
 constexpr Kind SEV_NOTE    = 0;
 constexpr Kind SEV_WARNING = 1;
 constexpr Kind SEV_ERROR   = 2;
-
+// ---- Task 5.1 (elab.cpp) ----
+constexpr int MAX_MODS = 64;      // distinct module definitions
+constexpr int MAX_INST = 1024;    // elaborated instances in the hierarchy (default inst_cap)
+ 
+// ---- Task 5.2 (sig.cpp) ----
+constexpr int MAX_SIG   = 4096;   // total signals (ports+nets) over all instances
+constexpr int MAX_PARAM = 1024;   // total parameter rows over all instances
+constexpr int MAX_CONN  = 4096;   // total resolved port<->net bindings
 } // namespace vsim
