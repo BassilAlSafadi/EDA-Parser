@@ -199,6 +199,125 @@ public:
     // Parser cursor (§2.6)
     int cur = 0;              // token cursor
     int cur_mod_ports = 0;    // head of current module's port list
+    //============================================================================
+// vsim_hpp_ADDITIONS.hpp -- APPEND these into class Vsim in vsim.hpp
+//----------------------------------------------------------------------------
+// Two new method groups, ported 1:1 from and commented with their source:
+//   vsim_elab.v -> elab.cpp   (Task 5.1: module hierarchy resolution)
+//   vsim_sig.v  -> sig.cpp    (Task 5.2: signal & port resolution)
+//
+// Same convention as the rest of vsim.hpp: one Vsim instance is one
+// independent copy of the whole machine. elaborate() must run (and succeed
+// enough to produce top_inst >= 0) before resolve_signals() is called --
+// sig.cpp reads mt_*/in_*/n_inst built by elab.cpp.
+//============================================================================
+
+// ===================================================== elab.cpp (Task 5.1)
+public:
+    int chain_len(int h) const;
+    int count_items(int h, Kind k) const;
+    int find_module(const std::string& nm) const;
+    int find_port_named(int mi, const std::string& nm) const;
+
+    int build_module_table(int root);
+    int check_conns(int inst, int tgt);
+    int resolve_items(int items);
+    int resolve_instances();
+    // want_top == "" means "decide automatically" (mirrors want_top == 0 in
+    // the Verilog, where 0 was the packed-identifier NULL).
+    int pick_top(const std::string& want_top);
+    int new_inst(const std::string& nm, int mi, int parent, int node);
+    int add_child(int parent, int kid);
+    bool mod_on_path(int i, int mi) const;
+    int elab_body(int self, int items);
+    int elaborate(int root, const std::string& want_top = std::string());
+
+    void fput_path(std::ostream& o, int i) const;
+    void dump_inst(std::ostream& o, int i, int ind) const;
+    void dump_hier(std::ostream& o) const;
+
+    // ------------------------------------------------------------- state
+    // Module table -- one row per module DEFINITION, in declaration order.
+    std::vector<std::string> mt_name;
+    std::vector<int> mt_node, mt_nports, mt_nparam, mt_ninst, mt_ngate, mt_refs;
+    int n_mod = 0;
+
+    // Instance table -- one row per ELABORATED instance. First-child /
+    // next-sibling tree, exactly as in vsim_elab.v §2.2: in_child[i] is i's
+    // first child, in_sib[c] the next child of the same parent, in_parent[c]
+    // the way back up. -1 is the null handle here (unlike the AST, where 0
+    // is NULL): instance 0 is the root of the design, module 0 a real module.
+    std::vector<std::string> in_name;
+    std::vector<int> in_mod, in_parent, in_node, in_child, in_sib, in_depth, in_nconn;
+    int n_inst = 0;
+
+    int  top_mod  = -1;
+    int  top_inst = -1;
+    bool elab_err = false;
+
+    // Effective instance-table capacity, elaboration's counterpart of
+    // node_cap. elaborate() does NOT reset it -- a caller may lower it
+    // before calling elaborate() to exercise the overflow path (mirrors
+    // vsim_top's +instcap=<N>), same as tb_elab.v criterion #12.
+    int inst_cap = MAX_INST;
+
+// ====================================================== sig.cpp (Task 5.2)
+public:
+    int find_sig_local(int inst, const std::string& nm) const;
+    int port_local_at(int inst, int pos) const;
+    int find_param_local(int inst, const std::string& nm) const;
+
+    int eval_const(int inst, int e);
+
+    int scan_decls(int inst, int items);
+    int build_scope(int inst);
+
+    int new_param(int inst, const std::string& nm, int val);
+    int scan_params(int inst, int items);
+    int apply_overrides(int inst);
+    int build_params(int inst);
+
+    int resolve_widths(int inst);
+
+    int resolve_conn_expr(int scope_inst, int e);
+    int new_conn(int inst, int portsig, int netsig);
+    int flatten_connections(int inst);
+
+    int resolve_signals();   // driver -- call after elaborate() succeeds
+
+    void dump_sig(std::ostream& o) const;
+
+    // ------------------------------------------------------------- state
+    // Signal table -- one row per port or per locally declared wire/reg,
+    // scoped to one instance. Ports of instance i always occupy sg_*
+    // indices [in_sig0[i] .. in_sig0[i]+mt_nports[in_mod[i]]-1), in header
+    // order (build_scope adds them first), so positional connections can
+    // index straight into this range via port_local_at.
+    std::vector<std::string> sg_name;
+    std::vector<int>  sg_inst, sg_node, sg_dir, sg_width;
+    std::vector<bool> sg_isport;
+    int n_sig = 0;
+
+    // Parameter table -- one row per parameter, scoped to one instance:
+    // defaults copied from the module (header #( ) list, then body
+    // `parameter` decls, declaration order), then overridden by that
+    // instance's own #( ) list.
+    std::vector<std::string> pm_name;
+    std::vector<int> pm_inst, pm_value;
+    int n_param = 0;
+
+    // Connection table -- one row per resolved port<->net binding. cn_port
+    // is a sg_* index in the CHILD's own scope, cn_net a sg_* index in the
+    // PARENT's scope, or -1 for an unconnected port or an unresolved
+    // expression.
+    std::vector<int> cn_inst, cn_port, cn_net;
+    int n_conn = 0;
+
+    std::vector<int> in_sig0;   // first sg_* index for this instance
+    std::vector<int> in_nsig;   // count of signals in its scope
+    std::vector<int> in_par0;   // first pm_* index for this instance
+
+    bool sig_err = false;
 };
 
 } // namespace vsim
