@@ -17,6 +17,10 @@ set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build="$here/build"
 gold="$here/golden"
+cd "$here"   # test_gate_wire.exe loads golden/half_adder_struct.v via a
+             # relative path, same convention ctest's WORKING_DIRECTORY
+             # uses for it -- pin cwd here so this script behaves the same
+             # regardless of where it was invoked from
 
 CMAKE="${CMAKE:-cmake}"
 command -v "$CMAKE" >/dev/null 2>&1 || CMAKE="$HOME/AppData/Roaming/Python/Python313/Scripts/cmake.exe"
@@ -36,7 +40,7 @@ bindir="$build/Release"
 
 fail=0
 echo "== unit tests =="
-for t in test_lexer test_parser test_elab; do
+for t in test_lexer test_parser test_elab test_gate_eval test_gate_wire; do
     out="$("$bindir/$t.exe")"
     echo "$out"
     echo "$out" | grep -q "FAIL" && fail=1
