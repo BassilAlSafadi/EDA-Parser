@@ -22,6 +22,7 @@ add_library(vsimcore
     src/elab.cpp
     src/gate_eval.cpp
     src/gate_wire.cpp
+    src/assign_eval.cpp
     src/sig.cpp
 )
 target_include_directories(vsimcore PUBLIC src)
@@ -49,3 +50,7 @@ add_test(NAME test_gate_eval COMMAND test_gate_eval)
 add_executable(test_gate_wire tests/test_gate_wire.cpp)
 target_link_libraries(test_gate_wire PRIVATE vsimcore)
 add_test(NAME test_gate_wire COMMAND test_gate_wire WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_assign_eval tests/test_assign_eval.cpp)
+target_link_libraries(test_assign_eval PRIVATE vsimcore)
+add_test(NAME test_assign_eval COMMAND test_assign_eval WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

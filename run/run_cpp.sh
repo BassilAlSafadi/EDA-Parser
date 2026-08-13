@@ -40,7 +40,7 @@ bindir="$build/Release"
 
 fail=0
 echo "== unit tests =="
-for t in test_lexer test_parser test_elab test_gate_eval test_gate_wire; do
+for t in test_lexer test_parser test_elab test_gate_eval test_gate_wire test_assign_eval; do
     out="$("$bindir/$t.exe")"
     echo "$out"
     echo "$out" | grep -q "FAIL" && fail=1
