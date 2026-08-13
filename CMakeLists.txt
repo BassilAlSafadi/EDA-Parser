@@ -19,6 +19,7 @@ add_library(vsimcore
     src/lexer.cpp
     src/parser.cpp
     src/dump.cpp
+    src/elab.cpp
 )
 target_include_directories(vsimcore PUBLIC src)
 
@@ -33,3 +34,7 @@ add_test(NAME test_lexer COMMAND test_lexer)
 add_executable(test_parser tests/test_parser.cpp)
 target_link_libraries(test_parser PRIVATE vsimcore)
 add_test(NAME test_parser COMMAND test_parser)
+
+add_executable(test_elab tests/test_elab.cpp)
+target_link_libraries(test_elab PRIVATE vsimcore)
+add_test(NAME test_elab COMMAND test_elab)

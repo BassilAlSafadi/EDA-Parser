@@ -1,15 +1,21 @@
 //============================================================================
 // main.cpp -- ported from vsim_top.v: plusarg handling and orchestration.
 //----------------------------------------------------------------------------
-// Wires the phases together for Phase 1: load -> lex -> parse -> dump. The
-// original's plusarg syntax is kept verbatim (+src=, +dump_tokens, ...) so
-// the run script needs no argument-style changes, just a different binary.
+// Wires the phases together: load -> lex -> parse -> [elaborate] -> dump.
+// The original's plusarg syntax is kept verbatim (+src=, +dump_tokens, ...)
+// so the run script needs no argument-style changes, just a different
+// binary. Elaboration (Task 5.1, Elaboration.md §4) runs automatically
+// whenever the parse succeeds -- it is a required stage of the flow, not an
+// opt-in dump, mirroring how PARSE OK/FAILED is unconditional today.
 //
 // Invocation (see run/run_cpp.sh):
 //   +src=<file.v>                 target file to parse             (required)
 //   +dump_tokens [+tokout=<f>]    write the token stream (§8)
 //   +dump_ast    [+astout=<f>]    write the AST S-expression (§6)
 //   +nodecap=<N>                  artificially cap the node arena (§9.10)
+//   +top=<name>                   override the deduced top module (Elaboration.md §3.1)
+//   +instcap=<N>                  artificially cap the instance table (Elaboration.md §5 #12)
+//   +dump_hier   [+hierout=<f>]   write the hierarchy S-expression (Elaboration.md §4)
 //============================================================================
 #include "vsim.hpp"
 
@@ -47,7 +53,8 @@ int main(int argc, char** argv) {
 
     auto src = value_arg(args, "src");
     if (!src) {
-        std::cout << "usage: +src=<file.v> [+dump_tokens] [+dump_ast] [+tokout=f] [+astout=f]\n";
+        std::cout << "usage: +src=<file.v> [+dump_tokens] [+dump_ast] [+dump_hier] "
+                     "[+top=<name>] [+instcap=<N>] [+tokout=f] [+astout=f] [+hierout=f]\n";
         return 0;
     }
 
@@ -59,6 +66,19 @@ int main(int argc, char** argv) {
         v.node_cap = std::stoi(*cap);
     v.lex();                                       // Phase 1b: scan tokens
     int root = v.parse_source();                   // Phase 1c: build the AST
+
+    // snapshot parse success before elaboration can add its own errors onto
+    // the same had_error flag (diag collector is shared, Elaboration.md §4)
+    bool parse_ok = !v.had_error && !v.arena_err;
+
+    bool did_elab = false;
+    if (parse_ok) {
+        if (auto cap = value_arg(args, "instcap"))     // overflow demo (Elaboration.md §5 #12)
+            v.inst_cap = std::stoi(*cap);
+        std::string want_top = value_arg(args, "top").value_or(std::string());
+        v.elaborate(root, want_top);                    // Phase 2, Task 5.1
+        did_elab = true;
+    }
 
     if (has_flag(args, "dump_tokens")) {
         if (auto out = value_arg(args, "tokout")) {
@@ -78,13 +98,32 @@ int main(int argc, char** argv) {
         }
     }
 
-    v.print_diags(std::cout);
+    if (did_elab && has_flag(args, "dump_hier")) {
+        if (auto out = value_arg(args, "hierout")) {
+            std::ofstream f(*out);
+            v.dump_hier(f);
+        } else {
+            v.dump_hier(std::cout);
+        }
+    }
 
-    if (v.had_error || v.arena_err)
+    v.print_diags(std::cout);   // parse + elaboration diagnostics, sorted together
+
+    if (!parse_ok)
         std::cout << "PARSE FAILED: " << v.n_diag << " diagnostic(s)\n";
     else
         std::cout << "PARSE OK: " << count_modules(v, root) << " module(s), "
                    << v.n_tok << " tokens, " << (v.n_node - 1) << " nodes\n";
+
+    if (did_elab) {
+        // had_error/elab_err are unconditionally false here unless
+        // elaborate() itself raised them, since parse_ok was already true
+        if (v.elab_err || v.had_error || v.top_mod < 0)
+            std::cout << "ELABORATE FAILED: " << v.n_diag << " diagnostic(s)\n";
+        else
+            std::cout << "ELABORATE OK: top='" << v.mt_name[static_cast<std::size_t>(v.top_mod)]
+                       << "', " << v.n_mod << " module(s), " << v.n_inst << " instance(s)\n";
+    }
 
     return 0;
 }

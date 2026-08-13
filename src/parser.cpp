@@ -518,6 +518,12 @@ int Vsim::parse_conn() {
 int Vsim::parse_mod_inst() {
     int n = new_node(ND_MOD_INST);
     nd_name[static_cast<std::size_t>(n)] = tok_text[static_cast<std::size_t>(cur)];   // module name
+    // elab.cpp positions every hierarchy diagnostic (undefined module, bad
+    // connection, recursion, ...) at nd_line[n]/nd_col[n]; new_node() zeroes
+    // both, so without this the position is always 0:0 (Elaboration.md §4's
+    // "bad_undef_inst.v:6:3: ..." example, golden/bad_undef_inst.v).
+    nd_line[static_cast<std::size_t>(n)] = tok_line[static_cast<std::size_t>(cur)];
+    nd_col[static_cast<std::size_t>(n)]  = tok_col[static_cast<std::size_t>(cur)];
     eat_tok();
     // optional parameter override  #( ... )
     if (cur_kind() == T_HASH) {
@@ -984,7 +990,14 @@ int Vsim::parse_module_item() {
 int Vsim::parse_module() {
     eat_tok();                                    // module
     int m = new_node(ND_MODULE);
-    if (cur_kind() == T_IDENT) { nd_name[static_cast<std::size_t>(m)] = tok_text[static_cast<std::size_t>(cur)]; eat_tok(); }
+    if (cur_kind() == T_IDENT) {
+        nd_name[static_cast<std::size_t>(m)] = tok_text[static_cast<std::size_t>(cur)];
+        // same reason as parse_mod_inst() above: elab.cpp's "duplicate
+        // definition of module" diagnostic reads nd_line[m]/nd_col[m].
+        nd_line[static_cast<std::size_t>(m)] = tok_line[static_cast<std::size_t>(cur)];
+        nd_col[static_cast<std::size_t>(m)]  = tok_col[static_cast<std::size_t>(cur)];
+        eat_tok();
+    }
     else expect(T_IDENT, "expected module name");
 
     int params = (cur_kind() == T_HASH) ? parse_param_port_list() : 0;
