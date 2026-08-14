@@ -162,17 +162,46 @@ int Vsim::scan_decls(int inst, int items) {
                     std::cerr << "FATAL: signal table exhausted (capacity=" << MAX_SIG << ")\n";
                 sig_err = true;
             } else {
-                if (find_sig_local(inst, nd_name[static_cast<std::size_t>(it)]) >= 0)
-                    add_diag(SEV_ERROR, nd_line[static_cast<std::size_t>(it)], nd_col[static_cast<std::size_t>(it)],
-                             "duplicate declaration of signal '" + nd_name[static_cast<std::size_t>(it)] + "'");
-                int s = n_sig;
-                sg_name[static_cast<std::size_t>(s)]   = nd_name[static_cast<std::size_t>(it)];
-                sg_inst[static_cast<std::size_t>(s)]   = inst;
-                sg_node[static_cast<std::size_t>(s)]   = it;
-                sg_isport[static_cast<std::size_t>(s)] = false;
-                sg_dir[static_cast<std::size_t>(s)]    = DIR_NONE;
-                sg_width[static_cast<std::size_t>(s)]  = 1;   // filled in by resolve_widths
-                n_sig += 1;
+                int existing = find_sig_local(inst, nd_name[static_cast<std::size_t>(it)]);
+
+                // BUGFIX (verified 2026-08-14, found by test_sim.cpp's own
+                // Suite 1): a port declared in the header with no net type
+                // yet (e.g. `output y;`) is legitimately completed by a
+                // later `wire y;` / `reg y;` of the SAME name -- that is
+                // standard, LRM-legal non-ANSI Verilog style (IEEE
+                // 1364-2001 12.3.3), not a duplicate declaration.
+                // Reproduced directly: `module m(output y); wire y; assign
+                // y = 1'b1; endmodule` was being rejected with "duplicate
+                // declaration of signal 'y'" even though it's valid
+                // Verilog. Fix: only treat this as a real duplicate if the
+                // existing entry is NOT an as-yet-untyped port -- i.e. it's
+                // a plain net/reg, or a port whose type was already
+                // completed by an earlier net/reg decl (sg_node no longer
+                // points at the raw ND_PORT node in that case).
+                bool completes_untyped_port =
+                    existing >= 0 && sg_isport[static_cast<std::size_t>(existing)] &&
+                    nd_kind[static_cast<std::size_t>(sg_node[static_cast<std::size_t>(existing)])] == ND_PORT;
+
+                if (completes_untyped_port) {
+                    // Attach this net/reg decl to the port's existing row
+                    // instead of creating a second row for the same name --
+                    // this also lets resolve_widths() below pick up an
+                    // explicit width from the wire/reg decl (e.g. `output
+                    // y; wire [3:0] y;`) instead of defaulting to 1 bit.
+                    sg_node[static_cast<std::size_t>(existing)] = it;
+                } else {
+                    if (existing >= 0)
+                        add_diag(SEV_ERROR, nd_line[static_cast<std::size_t>(it)], nd_col[static_cast<std::size_t>(it)],
+                                 "duplicate declaration of signal '" + nd_name[static_cast<std::size_t>(it)] + "'");
+                    int s = n_sig;
+                    sg_name[static_cast<std::size_t>(s)]   = nd_name[static_cast<std::size_t>(it)];
+                    sg_inst[static_cast<std::size_t>(s)]   = inst;
+                    sg_node[static_cast<std::size_t>(s)]   = it;
+                    sg_isport[static_cast<std::size_t>(s)] = false;
+                    sg_dir[static_cast<std::size_t>(s)]    = DIR_NONE;
+                    sg_width[static_cast<std::size_t>(s)]  = 1;   // filled in by resolve_widths
+                    n_sig += 1;
+                }
                 n += 1;
             }
         }
