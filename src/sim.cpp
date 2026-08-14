@@ -55,6 +55,41 @@ namespace {
 
 // Walk one instance's own module-body item chain; collect ND_CONT_ASSIGN
 // nodes and resolve their LHS idents.  Mirrors walk_items() in gate_wire.cpp.
+// BUGFIX (verified 2026-08-13, see the ND_CONCAT/ND_BIT_SELECT note in
+// eval_assign_expr() below for what was wrong): recursively check whether an
+// RHS expression tree uses a node kind eval_assign_expr() cannot actually
+// evaluate correctly in this single-bit subset -- concatenation, bit-select,
+// part-select, replication (all need width-aware values this subset doesn't
+// have). Returns the offending node so the caller can report a precise
+// diagnostic, or 0 if the whole tree is safe to evaluate.
+int find_unsupported_node(Vsim& v, int node) {
+    if (node == 0) return 0;
+    Kind k = v.nd_kind[static_cast<std::size_t>(node)];
+    switch (k) {
+        case ND_CONCAT:
+        case ND_BIT_SELECT:
+        case ND_PART_SELECT:
+        case ND_REPLICATION:
+            return node;
+        case ND_UNARY:
+            return find_unsupported_node(v, v.nd_a[static_cast<std::size_t>(node)]);
+        case ND_BINARY: {
+            int bad = find_unsupported_node(v, v.nd_a[static_cast<std::size_t>(node)]);
+            if (bad) return bad;
+            return find_unsupported_node(v, v.nd_b[static_cast<std::size_t>(node)]);
+        }
+        case ND_TERNARY: {
+            int bad = find_unsupported_node(v, v.nd_a[static_cast<std::size_t>(node)]);
+            if (bad) return bad;
+            bad = find_unsupported_node(v, v.nd_b[static_cast<std::size_t>(node)]);
+            if (bad) return bad;
+            return find_unsupported_node(v, v.nd_c[static_cast<std::size_t>(node)]);
+        }
+        default:
+            return 0;   // ND_LITERAL, ND_IDENT, or anything else -- fine
+    }
+}
+
 void walk_assigns(Vsim& v, int scope_inst, int items,
                   std::vector<AssignDriver>& out) {
     int it = items;
@@ -94,6 +129,26 @@ void walk_assigns(Vsim& v, int scope_inst, int items,
                            "assign LHS is too complex for this subset (only bare "
                            "identifiers are supported); assignment skipped");
                 d.lhs_sig = -1;
+            }
+
+            // BUGFIX (verified 2026-08-13): refuse to collect (and therefore
+            // ever evaluate) an assign whose RHS uses concatenation,
+            // bit-select, part-select, or replication -- eval_assign_expr()
+            // cannot evaluate these correctly in this single-bit subset (see
+            // its own comment). Previously these were silently mis-evaluated
+            // instead of being rejected here.
+            if (d.lhs_sig >= 0) {
+                int bad = find_unsupported_node(v, rhs_node);
+                if (bad != 0) {
+                    v.add_diag(SEV_WARNING,
+                               v.nd_line[static_cast<std::size_t>(bad)],
+                               v.nd_col[static_cast<std::size_t>(bad)],
+                               "assign RHS uses a construct not supported by this "
+                               "subset's evaluator (concatenation/bit-select/"
+                               "part-select/replication need width-aware values); "
+                               "assignment skipped");
+                    d.lhs_sig = -1;
+                }
             }
 
             out.push_back(d);
@@ -184,6 +239,22 @@ static Bit bit_neq(Bit a, Bit b) {
     return (eq == Bit::One) ? Bit::Zero : Bit::One;
 }
 
+// BUGFIX (verified 2026-08-13): case equality (=== / !==) is NOT the same
+// operator as logical equality (== / !=). LRM 5.4.1: === does an EXACT
+// 4-state bit comparison -- x and z count as literal digits to match, and
+// the result is ALWAYS a known 0 or 1, never x. bit_eq() above is correct
+// for == (where an x/z operand makes the result unknown) but was
+// incorrectly reused for === too, which silently made `x === x` evaluate
+// to x instead of the required 1. Confirmed with a real test:
+// `assign ceq = (a === b);` with a=x, b=x produced ceq=x before this fix;
+// it must produce ceq=1.
+static Bit bit_case_eq(Bit a, Bit b) {
+    return (a == b) ? Bit::One : Bit::Zero;
+}
+static Bit bit_case_neq(Bit a, Bit b) {
+    return (a == b) ? Bit::Zero : Bit::One;
+}
+
 // Logical AND (&&): scalar truth value. 0 dominates.
 static Bit bit_land(Bit a, Bit b) {
     a = logic_reduce(a);
@@ -229,10 +300,10 @@ static Bit apply_binary(Kind op, Bit a, Bit b) {
         case T_XNORT:    return bit_not(bit_xor(a, b));  // ~^ / ^~
         case T_LAND:     return bit_land(a, b);  // &&
         case T_LOR:      return bit_lor(a, b);   // ||
-        case T_EQ:       return bit_eq(a, b);    // ==
-        case T_CASE_EQ:  return bit_eq(a, b);    // === (treat same as == in 4-state)
-        case T_NEQ:      return bit_neq(a, b);   // !=
-        case T_CASE_NEQ: return bit_neq(a, b);   // !==
+        case T_EQ:       return bit_eq(a, b);       // ==
+        case T_CASE_EQ:  return bit_case_eq(a, b);  // === (exact match, never x -- see bugfix note above)
+        case T_NEQ:      return bit_neq(a, b);      // !=
+        case T_CASE_NEQ: return bit_case_neq(a, b); // !==
         // Arithmetic / comparison on single bits: treat 0/1 as integers.
         case T_PLUS:
             if (a == Bit::One && b == Bit::One) return Bit::Zero;  // 1+1 = 0 (bit 0 of 2)
@@ -311,18 +382,25 @@ Bit eval_assign_expr(const Vsim& v, int inst, int node,
             return (tb == fb) ? tb : Bit::X;
         }
 
-        // Concatenation: for single-bit subset, take the first element's bit 0.
-        case ND_CONCAT: {
-            int child = v.nd_a[static_cast<std::size_t>(node)];
-            if (child == 0) return Bit::X;
-            return eval_assign_expr(v, inst, child, vals);
-        }
-
-        // Bit-select: e.g., a[0] -- just evaluate the base for now.
-        case ND_BIT_SELECT: {
-            return eval_assign_expr(v, inst, v.nd_a[static_cast<std::size_t>(node)], vals);
-        }
-
+        // BUGFIX (verified 2026-08-13): ND_CONCAT and ND_BIT_SELECT used to be
+        // "handled" here, but neither actually did what its name says:
+        //   - ND_CONCAT evaluated only the FIRST element of `{a,b}` and
+        //     silently dropped the rest. Confirmed with a real test: with
+        //     a=0, b=1, `assign y = {a,b};` produced y=0 (=a), when even the
+        //     correct 1-bit-truncated answer (Verilog assigns the LSB of a
+        //     concat to a narrower target) is y=1 (=b).
+        //   - ND_BIT_SELECT evaluated the WHOLE base signal regardless of
+        //     which index was requested. Confirmed: `a[0]` and `a[1]` always
+        //     returned the identical value -- it wasn't indexing anything.
+        // The real fix is a width-aware SignalValues (one FourState per
+        // signal instead of one Bit), which is a bigger change than this
+        // subset supports today. Rather than keep silently returning a
+        // plausible-looking wrong answer, both node kinds now fall through
+        // to the same `default` case below, and collect_assign_drivers()
+        // refuses to collect (and reports a diagnostic for) any assign whose
+        // RHS uses either of them, so a bad answer is never fabricated --
+        // same "report and skip" policy every other file in this project
+        // already uses (resolve_conn_expr, gate_wire.cpp's collect_gate_instances).
         default:
             return Bit::X;   // unsupported node kind; X propagates safely
     }

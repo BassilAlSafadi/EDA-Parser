@@ -1,0 +1,8 @@
+# Vector file for golden/half_adder_rtl.v (assign-statement / RTL style).
+# One line = one test cycle. Each token is name=bit. a/b are inputs (driven);
+# sum/carry are outputs (checked against the value given here).
+a=0 b=0 sum=0 carry=0
+a=1 b=0 sum=1 carry=0
+a=0 b=1 sum=1 carry=0
+a=1 b=1 sum=0 carry=1
+a=x b=0 sum=x carry=0
