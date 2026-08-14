@@ -1,0 +1,7 @@
+(design "fsm"
+  (modules
+    (ND_MODULE "fsm" ports=4 params=0 insts=0 gates=0 refs=0))
+  (hierarchy
+    (inst "fsm" of "fsm" conns=0))
+  (paths
+    "fsm"))

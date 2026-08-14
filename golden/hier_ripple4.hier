@@ -1,0 +1,33 @@
+(design "ripple_adder4"
+  (modules
+    (ND_MODULE "half_adder" ports=4 params=0 insts=0 gates=2 refs=2)
+    (ND_MODULE "full_adder" ports=5 params=0 insts=2 gates=1 refs=4)
+    (ND_MODULE "ripple_adder4" ports=5 params=0 insts=4 gates=0 refs=0))
+  (hierarchy
+    (inst "ripple_adder4" of "ripple_adder4" conns=0
+      (inst "fa0" of "full_adder" conns=5
+        (inst "h0" of "half_adder" conns=4)
+        (inst "h1" of "half_adder" conns=4))
+      (inst "fa1" of "full_adder" conns=5
+        (inst "h0" of "half_adder" conns=4)
+        (inst "h1" of "half_adder" conns=4))
+      (inst "fa2" of "full_adder" conns=5
+        (inst "h0" of "half_adder" conns=4)
+        (inst "h1" of "half_adder" conns=4))
+      (inst "fa3" of "full_adder" conns=5
+        (inst "h0" of "half_adder" conns=4)
+        (inst "h1" of "half_adder" conns=4))))
+  (paths
+    "ripple_adder4"
+    "ripple_adder4.fa0"
+    "ripple_adder4.fa0.h0"
+    "ripple_adder4.fa0.h1"
+    "ripple_adder4.fa1"
+    "ripple_adder4.fa1.h0"
+    "ripple_adder4.fa1.h1"
+    "ripple_adder4.fa2"
+    "ripple_adder4.fa2.h0"
+    "ripple_adder4.fa2.h1"
+    "ripple_adder4.fa3"
+    "ripple_adder4.fa3.h0"
+    "ripple_adder4.fa3.h1"))

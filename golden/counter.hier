@@ -1,0 +1,7 @@
+(design "counter"
+  (modules
+    (ND_MODULE "counter" ports=3 params=1 insts=0 gates=0 refs=0))
+  (hierarchy
+    (inst "counter" of "counter" conns=0))
+  (paths
+    "counter"))

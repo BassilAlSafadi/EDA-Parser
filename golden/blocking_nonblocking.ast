@@ -1,0 +1,15 @@
+(ND_MODULE "blocking_nonblocking"
+  (ports
+    (ND_PORT "clk" input)
+    (ND_PORT "b" output)
+    (ND_PORT "nb" output))
+  (items
+    (ND_REG "t")
+    (ND_ALWAYS (ND_EVENT_EXPR (ND_EVENT_TERM posedge (ND_IDENT "clk")))
+      (ND_SEQ_BLOCK ""
+        (ND_BLK_ASSIGN (ND_IDENT "t") (ND_LITERAL 1'd1))
+        (ND_BLK_ASSIGN (ND_IDENT "b") (ND_IDENT "t"))))
+    (ND_ALWAYS (ND_EVENT_EXPR (ND_EVENT_TERM posedge (ND_IDENT "clk")))
+      (ND_SEQ_BLOCK ""
+        (ND_NB_ASSIGN (ND_IDENT "t") (ND_LITERAL 1'd1))
+        (ND_NB_ASSIGN (ND_IDENT "nb") (ND_IDENT "t"))))))

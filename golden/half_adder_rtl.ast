@@ -1,0 +1,9 @@
+(ND_MODULE "half_adder_rtl"
+  (ports
+    (ND_PORT "a" input)
+    (ND_PORT "b" input)
+    (ND_PORT "sum" output)
+    (ND_PORT "carry" output))
+  (items
+    (ND_CONT_ASSIGN (ND_IDENT "sum") (ND_BINARY ^ (ND_IDENT "a") (ND_IDENT "b")))
+    (ND_CONT_ASSIGN (ND_IDENT "carry") (ND_BINARY & (ND_IDENT "a") (ND_IDENT "b")))))

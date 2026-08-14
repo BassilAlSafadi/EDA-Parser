@@ -1,0 +1,32 @@
+3:1 KW module
+3:8 IDENT half_adder_rtl
+3:22 LPAREN 
+3:23 KW input
+3:29 IDENT a
+3:30 COMMA 
+3:32 KW input
+3:38 IDENT b
+3:39 COMMA 
+3:41 KW output
+3:48 IDENT sum
+3:51 COMMA 
+3:53 KW output
+3:60 IDENT carry
+3:65 RPAREN 
+3:66 SEMI 
+4:3 KW assign
+4:10 IDENT sum
+4:16 ASSIGN 
+4:18 IDENT a
+4:20 CARET 
+4:22 IDENT b
+4:23 SEMI 
+5:3 KW assign
+5:10 IDENT carry
+5:16 ASSIGN 
+5:18 IDENT a
+5:20 AMP 
+5:22 IDENT b
+5:23 SEMI 
+6:1 KW endmodule
+7:1 EOF 
