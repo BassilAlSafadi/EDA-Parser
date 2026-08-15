@@ -1,0 +1,22 @@
+Port configuration -- testcase4_full_adder_gate (full_adder_gate.v)
+====================================================================
+name    direction   width   description
+----    ---------   -----   -----------
+a       input       1       operand bit A
+b       input       1       operand bit B
+cin     input       1       carry-in
+s       output      1       s    = xor(xor(a,b), cin)
+cout    output      1       cout = or(and(a,b), and(xor(a,b),cin))
+
+Internal (not top-level ports, shown only if +port= is omitted):
+t1  net  1   a XOR b (shared by both the sum chain and the carry chain)
+g1  net  1   a AND b
+g2  net  1   t1 AND cin
+
+CLI port list (for the +port= plusarg):
+a,b,cin,s,cout
+
+Run command (from repo root, after building with run/run_cpp.sh):
+build/Release/vsim.exe +src=test/testcase4_full_adder_gate/full_adder_gate.v ^
+    +sim +vec=test/testcase4_full_adder_gate/full_adder_gate.vec ^
+    +port=a,b,cin,s,cout

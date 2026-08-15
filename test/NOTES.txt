@@ -1,0 +1,61 @@
+test/ -- demo test suite for the C++ Verilog parser/elaborator/simulator
+=========================================================================
+
+Directory layout (one test case per directory):
+
+  test/testcaseN_<name>/
+      <name>.v      -- the Verilog source under test
+      <name>.vec    -- stimulus + expected-output vectors (name=bit per line)
+      ports.txt     -- port list/directions and the exact command to run it
+
+Run any single case:
+
+  build/Release/vsim.exe +src=test/testcaseN_<name>/<name>.v +sim \
+      +vec=test/testcaseN_<name>/<name>.vec +port=<names from ports.txt>
+
+Or run all of them in one shot with test/run_tests.sh (build the tool
+first with run/run_cpp.sh, or point RUN_TESTS_BIN at an existing vsim.exe).
+
+Cases included:
+  1. half_adder_rtl   -- assign statements (^, &), RTL style
+  2. half_adder_gate  -- xor/and gate primitives, structural style
+  3. full_adder_rtl   -- assign statements with chained ^ and majority &/|
+  4. full_adder_gate  -- 5 chained gate primitives (xor/and/or) in one module
+  5. mux2to1_rtl      -- ternary (?:) operator, including X when branches disagree
+  6. sr_latch_gate    -- cross-coupled nor gates; a feedback loop settled by
+                         the delta-cycle fixed-point solver
+
+Why every case is a single, flat module
+----------------------------------------
+The Phase-3 simulator (src/sim.cpp) is a deliberately scoped subset:
+  - Signals are single-bit only. Part-selects, concatenation and
+    replication are recognised by the parser but are refused at
+    simulation time (collect_assign_drivers reports and skips any
+    assign that uses them) because there is no width-aware value type
+    yet -- see the BUGFIX comment above eval_assign_expr in sim.cpp.
+  - `always` blocks (clocked or combinational) are not evaluated by
+    simulate() at all -- only continuous `assign` statements and gate
+    primitives (and/or/xor/nand/nor/xnor/not/buf) are. counter.v,
+    fsm.v, blocking_nonblocking.v and op_battery.v in golden/ exercise
+    the parser/elaborator but are NOT simulate-able for this reason.
+  - Cross-module signal propagation is not implemented: connections
+    between a parent instance's net and a child instance's port are
+    recorded by signal resolution (visible via +dump_sig) but
+    delta_cycle() never copies values across that boundary, so a
+    design built from user-defined sub-module instances (e.g. a full
+    adder built out of two half_adder instances) will leave the
+    outer-level output stuck at X. Only gate *primitives* are safe to
+    instantiate -- they're flattened, not treated as sub-modules.
+    This is why testcase4's full adder is one module with 5 gates
+    rather than two half_adder instances plus an or gate.
+  - simulate() re-initialises every signal to X at the start of each
+    vector line (see the comment above the loop in sim.cpp's
+    simulate()), so there is no state carried between vector lines.
+    testcase6 (SR latch) relies on this: the "hold" row settles to X
+    rather than remembering the previous set/reset, which is expected
+    behaviour for this tool, not a latch bug.
+
+None of the above are bugs to fix for this demo -- they're the
+documented boundary of what Phase 3 currently covers, and every test
+case here was chosen to stay inside that boundary so it can actually
+be run live.

@@ -1,0 +1,16 @@
+Port configuration -- testcase1_half_adder_rtl (half_adder_rtl.v)
+====================================================================
+name    direction   width   description
+----    ---------   -----   -----------
+a       input       1       operand bit A
+b       input       1       operand bit B
+sum     output      1       sum   = a XOR b
+carry   output      1       carry = a AND b
+
+CLI port list (for the +port= plusarg):
+a,b,sum,carry
+
+Run command (from repo root, after building with run/run_cpp.sh):
+build/Release/vsim.exe +src=test/testcase1_half_adder_rtl/half_adder_rtl.v ^
+    +sim +vec=test/testcase1_half_adder_rtl/half_adder_rtl.vec ^
+    +port=a,b,sum,carry

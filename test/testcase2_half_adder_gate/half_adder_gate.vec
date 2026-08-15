@@ -1,0 +1,8 @@
+# Vector file for testcase2/half_adder_gate.v.
+# One line = one test cycle. Each token is name=bit. A/B are inputs (driven);
+# Sum/Carry are outputs (checked against the value given here).
+A=0 B=0 Sum=0 Carry=0
+A=0 B=1 Sum=1 Carry=0
+A=1 B=0 Sum=1 Carry=0
+A=1 B=1 Sum=0 Carry=1
+A=x B=1 Sum=x Carry=x

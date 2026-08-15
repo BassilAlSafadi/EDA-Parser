@@ -1,0 +1,13 @@
+# Vector file for testcase5/mux2to1_rtl.v.
+# One line = one test cycle. Each token is name=bit. sel/a/b are inputs
+# (driven); y is the output (checked against the value given here).
+sel=0 a=0 b=0 y=0
+sel=0 a=0 b=1 y=1
+sel=0 a=1 b=0 y=0
+sel=0 a=1 b=1 y=1
+sel=1 a=0 b=0 y=0
+sel=1 a=0 b=1 y=0
+sel=1 a=1 b=0 y=1
+sel=1 a=1 b=1 y=1
+sel=x a=1 b=1 y=1
+sel=x a=1 b=0 y=x

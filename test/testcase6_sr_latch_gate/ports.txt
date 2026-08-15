@@ -1,0 +1,22 @@
+Port configuration -- testcase6_sr_latch_gate (sr_latch_gate.v)
+====================================================================
+name    direction   width   description
+----    ---------   -----   -----------
+s       input       1       set line   (active high)
+r       input       1       reset line (active high)
+q       output      1       latch output      = nor(r, qn)
+qn      output      1       latch output, inv = nor(s, q)
+
+Truth table exercised by sr_latch_gate.vec:
+s=1 r=0 -> q=1 qn=0   (set)
+s=0 r=1 -> q=0 qn=1   (reset)
+s=0 r=0 -> q=x qn=x   (hold -- undefined here, no carried state; see .v NOTE)
+s=1 r=1 -> q=0 qn=0   (invalid/both-active condition)
+
+CLI port list (for the +port= plusarg):
+s,r,q,qn
+
+Run command (from repo root, after building with run/run_cpp.sh):
+build/Release/vsim.exe +src=test/testcase6_sr_latch_gate/sr_latch_gate.v ^
+    +sim +vec=test/testcase6_sr_latch_gate/sr_latch_gate.vec ^
+    +port=s,r,q,qn

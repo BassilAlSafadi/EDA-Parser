@@ -1,0 +1,20 @@
+Port configuration -- testcase5_mux2to1_rtl (mux2to1_rtl.v)
+====================================================================
+name    direction   width   description
+----    ---------   -----   -----------
+sel     input       1       select line: 0 -> y=b, 1 -> y=a
+a       input       1       data input A
+b       input       1       data input B
+y       output      1       y = sel ? a : b
+
+Notable rows in mux2to1_rtl.vec:
+sel=x, a=1, b=1 -> y=1   (both branches agree, so result is still known)
+sel=x, a=1, b=0 -> y=x   (branches disagree, so result is unknown)
+
+CLI port list (for the +port= plusarg):
+sel,a,b,y
+
+Run command (from repo root, after building with run/run_cpp.sh):
+build/Release/vsim.exe +src=test/testcase5_mux2to1_rtl/mux2to1_rtl.v ^
+    +sim +vec=test/testcase5_mux2to1_rtl/mux2to1_rtl.vec ^
+    +port=sel,a,b,y

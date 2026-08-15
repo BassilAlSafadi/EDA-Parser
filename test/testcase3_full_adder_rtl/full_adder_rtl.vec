@@ -1,0 +1,13 @@
+# Vector file for testcase3/full_adder_rtl.v.
+# One line = one test cycle. Each token is name=bit. a/b/cin are inputs
+# (driven); s/cout are outputs (checked against the value given here).
+# All 8 combinations of a,b,cin, plus one X-propagation case.
+a=0 b=0 cin=0 s=0 cout=0
+a=0 b=0 cin=1 s=1 cout=0
+a=0 b=1 cin=0 s=1 cout=0
+a=0 b=1 cin=1 s=0 cout=1
+a=1 b=0 cin=0 s=1 cout=0
+a=1 b=0 cin=1 s=0 cout=1
+a=1 b=1 cin=0 s=0 cout=1
+a=1 b=1 cin=1 s=1 cout=1
+a=x b=0 cin=0 s=x cout=0

@@ -1,0 +1,9 @@
+# Vector file for testcase6/sr_latch_gate.v.
+# One line = one test cycle. Each token is name=bit. s/r are inputs
+# (driven); q/qn are outputs (checked against the value given here).
+# Each line is evaluated from a fresh X state (no memory across lines --
+# see the NOTE in sr_latch_gate.v), so "hold" (s=0,r=0) settles to X.
+s=1 r=0 q=1 qn=0
+s=0 r=1 q=0 qn=1
+s=0 r=0 q=x qn=x
+s=1 r=1 q=0 qn=0

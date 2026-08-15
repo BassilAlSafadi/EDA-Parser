@@ -1,0 +1,16 @@
+Port configuration -- testcase2_half_adder_gate (half_adder_gate.v)
+====================================================================
+name    direction   width   description
+----    ---------   -----   -----------
+A       input       1       operand bit A
+B       input       1       operand bit B
+Sum     output      1       Sum   = A XOR B  (xor gate primitive)
+Carry   output      1       Carry = A AND B  (and gate primitive)
+
+CLI port list (for the +port= plusarg):
+A,B,Sum,Carry
+
+Run command (from repo root, after building with run/run_cpp.sh):
+build/Release/vsim.exe +src=test/testcase2_half_adder_gate/half_adder_gate.v ^
+    +sim +vec=test/testcase2_half_adder_gate/half_adder_gate.vec ^
+    +port=A,B,Sum,Carry

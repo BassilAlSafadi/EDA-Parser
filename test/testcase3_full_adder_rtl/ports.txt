@@ -1,0 +1,17 @@
+Port configuration -- testcase3_full_adder_rtl (full_adder_rtl.v)
+====================================================================
+name    direction   width   description
+----    ---------   -----   -----------
+a       input       1       operand bit A
+b       input       1       operand bit B
+cin     input       1       carry-in
+s       output      1       s    = a XOR b XOR cin
+cout    output      1       cout = (a&b) | (a&cin) | (b&cin)   (majority)
+
+CLI port list (for the +port= plusarg):
+a,b,cin,s,cout
+
+Run command (from repo root, after building with run/run_cpp.sh):
+build/Release/vsim.exe +src=test/testcase3_full_adder_rtl/full_adder_rtl.v ^
+    +sim +vec=test/testcase3_full_adder_rtl/full_adder_rtl.vec ^
+    +port=a,b,cin,s,cout
