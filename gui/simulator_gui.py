@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import os
+import re
 
 
 class VerilogSimulatorGUI:
@@ -22,7 +23,12 @@ class VerilogSimulatorGUI:
         self.ports_var = tk.StringVar()
         self.status_var = tk.StringVar(value="Ready")
 
+        # vsim's +sim output looks like: "time=0  a=0 b=1 sum=1 carry=0"
+        self.WAVE_LINE_RE = re.compile(r"^\s*time=(\S+)(.*)$")
+        self.WAVE_PAIR_RE = re.compile(r"(\S+)=([01xzXZ])(?:\s|$)")
+
         self.build_ui()
+        self.populate_waveform("")
 
     def build_ui(self):
         main = ttk.Frame(self.root, padding=16)
@@ -95,20 +101,51 @@ class VerilogSimulatorGUI:
         result_frame = ttk.LabelFrame(main, text="Simulation Results", padding=8)
         result_frame.pack(fill="both", expand=True)
 
+        self.results_notebook = ttk.Notebook(result_frame)
+        self.results_notebook.pack(fill="both", expand=True)
+
+        # --- Waveform tab: the actual per-cycle signal trace ---------------
+        wave_tab = ttk.Frame(self.results_notebook, padding=(0, 6, 0, 0))
+        self.results_notebook.add(wave_tab, text="Waveform")
+
+        self.wave_tree = ttk.Treeview(wave_tab, show="headings")
+        wave_yscroll = ttk.Scrollbar(
+            wave_tab, orient="vertical", command=self.wave_tree.yview
+        )
+        wave_xscroll = ttk.Scrollbar(
+            wave_tab, orient="horizontal", command=self.wave_tree.xview
+        )
+        self.wave_tree.configure(
+            yscrollcommand=wave_yscroll.set,
+            xscrollcommand=wave_xscroll.set
+        )
+        self.wave_tree.grid(row=0, column=0, sticky="nsew")
+        wave_yscroll.grid(row=0, column=1, sticky="ns")
+        wave_xscroll.grid(row=1, column=0, sticky="ew")
+        wave_tab.rowconfigure(0, weight=1)
+        wave_tab.columnconfigure(0, weight=1)
+
+        self.wave_tree.tag_configure("even", background="#f2f2f2")
+        self.wave_tree.tag_configure("odd", background="#ffffff")
+
+        # --- Console log tab: raw stdout/stderr, kept for diagnostics ------
+        log_tab = ttk.Frame(self.results_notebook)
+        self.results_notebook.add(log_tab, text="Console Log")
+
         self.output = tk.Text(
-            result_frame,
+            log_tab,
             wrap="none",
             font=("Consolas", 11),
             state="disabled"
         )
 
         yscroll = ttk.Scrollbar(
-            result_frame,
+            log_tab,
             orient="vertical",
             command=self.output.yview
         )
         xscroll = ttk.Scrollbar(
-            result_frame,
+            log_tab,
             orient="horizontal",
             command=self.output.xview
         )
@@ -122,14 +159,15 @@ class VerilogSimulatorGUI:
         yscroll.grid(row=0, column=1, sticky="ns")
         xscroll.grid(row=1, column=0, sticky="ew")
 
-        result_frame.rowconfigure(0, weight=1)
-        result_frame.columnconfigure(0, weight=1)
+        log_tab.rowconfigure(0, weight=1)
+        log_tab.columnconfigure(0, weight=1)
 
         self.write_output(
             "Ready.\n"
             f"Expected simulator: {self.vsim_path}\n"
-            "Select a .v file, a .vec file, enter the output ports, "
+            "Select a .v file, a .vec file, enter the ports to trace, "
             "then click Run Simulation.\n"
+            "The Waveform tab will show the per-cycle signal values.\n"
         )
 
     def browse_verilog(self):
@@ -151,6 +189,51 @@ class VerilogSimulatorGUI:
 
     def clear_output(self):
         self.write_output("")
+        self.populate_waveform("")
+
+    def populate_waveform(self, sim_text):
+        """Parse vsim's '+sim' output ("time=N  a=0 b=1 sum=1") into rows of
+        a Treeview, so each cycle's actual signal values are visible instead
+        of just a final pass/fail line."""
+        self.wave_tree.delete(*self.wave_tree.get_children())
+
+        rows = []
+        column_order = []
+        seen = set()
+        for line in sim_text.splitlines():
+            m = self.WAVE_LINE_RE.match(line)
+            if not m:
+                continue
+            row = {"time": m.group(1)}
+            for name, value in self.WAVE_PAIR_RE.findall(m.group(2) + " "):
+                row[name] = value
+                if name not in seen:
+                    seen.add(name)
+                    column_order.append(name)
+            rows.append(row)
+
+        if not rows:
+            self.wave_tree["columns"] = ("message",)
+            self.wave_tree.heading("message", text="Waveform")
+            self.wave_tree.column("message", width=650, anchor="w")
+            self.wave_tree.insert(
+                "", "end",
+                values=("Run a simulation to see per-cycle signal values here.",)
+            )
+            return
+
+        columns = ["time"] + column_order
+        self.wave_tree["columns"] = columns
+        self.wave_tree.column("time", width=70, anchor="center", stretch=False)
+        self.wave_tree.heading("time", text="time")
+        for name in column_order:
+            self.wave_tree.column(name, width=90, anchor="center", stretch=False)
+            self.wave_tree.heading(name, text=name)
+
+        for i, row in enumerate(rows):
+            values = [row.get(c, "") for c in columns]
+            tag = "even" if i % 2 == 0 else "odd"
+            self.wave_tree.insert("", "end", values=values, tags=(tag,))
 
     def write_output(self, text):
         self.output.configure(state="normal")
@@ -241,6 +324,7 @@ class VerilogSimulatorGUI:
                     + result.stderr
                 )
 
+            simulation_file = ""
             if output_file.exists():
                 simulation_file = output_file.read_text(
                     encoding="utf-8",
@@ -253,16 +337,49 @@ class VerilogSimulatorGUI:
                         + simulation_file
                     )
 
-            if result.returncode == 0:
-                self.status_var.set("Simulation completed successfully")
-                self.append_output("\nSTATUS: PASS / PROCESS COMPLETED\n")
-            else:
+            self.populate_waveform(simulation_file)
+
+            # vsim.exe currently always exits 0, even after PARSE/ELABORATE/
+            # RESOLVE FAILED, so the exit code can't tell us whether the
+            # simulation actually ran. Read the real outcome out of stdout
+            # instead, and only trust the waveform tab when it did.
+            stdout_text = result.stdout or ""
+            failed_stage = next(
+                (stage for stage in ("PARSE", "ELABORATE", "RESOLVE")
+                 if f"{stage} FAILED" in stdout_text),
+                None
+            )
+            simulate_ok = "SIMULATE OK" in stdout_text
+
+            if result.returncode != 0:
                 self.status_var.set(
-                    f"Simulation failed (exit code {result.returncode})"
+                    f"vsim.exe crashed (exit code {result.returncode})"
                 )
                 self.append_output(
                     f"\nSTATUS: FAIL (exit code {result.returncode})\n"
                 )
+                self.results_notebook.select(1)
+            elif failed_stage:
+                self.status_var.set(
+                    f"{failed_stage.title()} failed -- see Console Log"
+                )
+                self.append_output(f"\nSTATUS: {failed_stage} FAILED\n")
+                self.results_notebook.select(1)
+            elif not simulate_ok:
+                self.status_var.set("Simulation did not run -- see Console Log")
+                self.append_output("\nSTATUS: NO SIMULATION OUTPUT\n")
+                self.results_notebook.select(1)
+            elif not simulation_file.strip():
+                self.status_var.set(
+                    "Ran, but produced no signal data -- check vector "
+                    "file format and port names in Console Log"
+                )
+                self.append_output("\nSTATUS: SIMULATE OK, NO WAVEFORM DATA\n")
+                self.results_notebook.select(1)
+            else:
+                self.status_var.set("Simulation completed successfully")
+                self.append_output("\nSTATUS: PASS / PROCESS COMPLETED\n")
+                self.results_notebook.select(0)
 
         except Exception as exc:
             self.status_var.set("Error")
