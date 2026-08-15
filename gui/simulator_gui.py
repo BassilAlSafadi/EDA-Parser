@@ -6,6 +6,11 @@ import tempfile
 import os
 import re
 
+import matplotlib
+matplotlib.use("TkAgg")
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+
 
 class VerilogSimulatorGUI:
     def __init__(self, root):
@@ -108,12 +113,39 @@ class VerilogSimulatorGUI:
         wave_tab = ttk.Frame(self.results_notebook, padding=(0, 6, 0, 0))
         self.results_notebook.add(wave_tab, text="Waveform")
 
-        self.wave_tree = ttk.Treeview(wave_tab, show="headings")
+        wave_tab.rowconfigure(1, weight=1)
+        wave_tab.columnconfigure(0, weight=1)
+
+        # Toggle between the table view and the matplotlib waveform drawing.
+        self.wave_view_mode = tk.StringVar(value="table")
+        view_toggle = ttk.Frame(wave_tab)
+        view_toggle.grid(row=0, column=0, sticky="w", pady=(0, 6))
+        ttk.Label(view_toggle, text="View:").pack(side="left", padx=(0, 8))
+        ttk.Radiobutton(
+            view_toggle, text="Table", value="table",
+            variable=self.wave_view_mode, command=self.on_wave_view_change
+        ).pack(side="left")
+        ttk.Radiobutton(
+            view_toggle, text="Waveform Drawing", value="plot",
+            variable=self.wave_view_mode, command=self.on_wave_view_change
+        ).pack(side="left", padx=(8, 0))
+
+        self.wave_view_container = ttk.Frame(wave_tab)
+        self.wave_view_container.grid(row=1, column=0, sticky="nsew")
+        self.wave_view_container.rowconfigure(0, weight=1)
+        self.wave_view_container.columnconfigure(0, weight=1)
+
+        # -- Table sub-view --------------------------------------------------
+        self.wave_table_frame = ttk.Frame(self.wave_view_container)
+        self.wave_table_frame.rowconfigure(0, weight=1)
+        self.wave_table_frame.columnconfigure(0, weight=1)
+
+        self.wave_tree = ttk.Treeview(self.wave_table_frame, show="headings")
         wave_yscroll = ttk.Scrollbar(
-            wave_tab, orient="vertical", command=self.wave_tree.yview
+            self.wave_table_frame, orient="vertical", command=self.wave_tree.yview
         )
         wave_xscroll = ttk.Scrollbar(
-            wave_tab, orient="horizontal", command=self.wave_tree.xview
+            self.wave_table_frame, orient="horizontal", command=self.wave_tree.xview
         )
         self.wave_tree.configure(
             yscrollcommand=wave_yscroll.set,
@@ -122,11 +154,24 @@ class VerilogSimulatorGUI:
         self.wave_tree.grid(row=0, column=0, sticky="nsew")
         wave_yscroll.grid(row=0, column=1, sticky="ns")
         wave_xscroll.grid(row=1, column=0, sticky="ew")
-        wave_tab.rowconfigure(0, weight=1)
-        wave_tab.columnconfigure(0, weight=1)
 
         self.wave_tree.tag_configure("even", background="#f2f2f2")
         self.wave_tree.tag_configure("odd", background="#ffffff")
+
+        # -- Waveform drawing sub-view (matplotlib) ---------------------------
+        self.wave_plot_frame = ttk.Frame(self.wave_view_container)
+        self.wave_plot_frame.rowconfigure(0, weight=1)
+        self.wave_plot_frame.columnconfigure(0, weight=1)
+
+        self.wave_figure = Figure(figsize=(6, 4), dpi=100)
+        self.wave_canvas = FigureCanvasTkAgg(self.wave_figure, master=self.wave_plot_frame)
+        self.wave_canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
+
+        # Data cache used to (re)draw the current view without re-parsing.
+        self._wave_rows = []
+        self._wave_columns = []
+
+        self.wave_table_frame.grid(row=0, column=0, sticky="nsew")
 
         # --- Console log tab: raw stdout/stderr, kept for diagnostics ------
         log_tab = ttk.Frame(self.results_notebook)
@@ -192,11 +237,10 @@ class VerilogSimulatorGUI:
         self.populate_waveform("")
 
     def populate_waveform(self, sim_text):
-        """Parse vsim's '+sim' output ("time=N  a=0 b=1 sum=1") into rows of
-        a Treeview, so each cycle's actual signal values are visible instead
-        of just a final pass/fail line."""
-        self.wave_tree.delete(*self.wave_tree.get_children())
-
+        """Parse vsim's '+sim' output ("time=N  a=0 b=1 sum=1") into rows,
+        cache them, and render both the table and the plot sub-views so
+        each cycle's actual signal values are visible instead of just a
+        final pass/fail line."""
         rows = []
         column_order = []
         seen = set()
@@ -211,6 +255,15 @@ class VerilogSimulatorGUI:
                     seen.add(name)
                     column_order.append(name)
             rows.append(row)
+
+        self._wave_rows = rows
+        self._wave_columns = column_order
+
+        self.render_wave_table(rows, column_order)
+        self.render_wave_plot(rows, column_order)
+
+    def render_wave_table(self, rows, column_order):
+        self.wave_tree.delete(*self.wave_tree.get_children())
 
         if not rows:
             self.wave_tree["columns"] = ("message",)
@@ -234,6 +287,73 @@ class VerilogSimulatorGUI:
             values = [row.get(c, "") for c in columns]
             tag = "even" if i % 2 == 0 else "odd"
             self.wave_tree.insert("", "end", values=values, tags=(tag,))
+
+    def render_wave_plot(self, rows, column_order):
+        """Draw a digital-timing-diagram style step plot, one row of axes
+        per signal, using matplotlib."""
+        self.wave_figure.clear()
+
+        if not rows or not column_order:
+            ax = self.wave_figure.add_subplot(111)
+            ax.text(
+                0.5, 0.5,
+                "Run a simulation to see the waveform drawing here.",
+                ha="center", va="center", transform=ax.transAxes
+            )
+            ax.set_axis_off()
+            self.wave_canvas.draw()
+            return
+
+        def to_float(t):
+            try:
+                return float(t)
+            except (TypeError, ValueError):
+                return None
+
+        times = [to_float(r.get("time")) for r in rows]
+        if any(t is None for t in times):
+            times = list(range(len(rows)))
+
+        n = len(column_order)
+        axes = self.wave_figure.subplots(n, 1, sharex=True, squeeze=False)
+
+        for i, name in enumerate(column_order):
+            ax = axes[i][0]
+            raw_values = [r.get(name, "x").lower() for r in rows]
+            values = [1 if v == "1" else 0 for v in raw_values]
+            # Repeat the last value/time at a trailing point so the final
+            # level is visible as a held step rather than stopping mid-air.
+            step_times = times + [times[-1] + 1]
+            step_values = values + [values[-1]]
+            ax.step(step_times, step_values, where="post", linewidth=1.5, color="tab:blue")
+
+            # Shade unknown/high-Z cycles ("x"/"z") since they don't have a
+            # real 0/1 level -- collapsing them to 0 would be misleading.
+            for j, v in enumerate(raw_values):
+                if v in ("x", "z"):
+                    ax.axvspan(
+                        step_times[j], step_times[j + 1],
+                        color="0.6", alpha=0.4, linewidth=0
+                    )
+
+            ax.set_ylim(-0.3, 1.3)
+            ax.set_yticks([0, 1])
+            ax.set_ylabel(name, rotation=0, ha="right", va="center")
+            ax.grid(True, axis="x", linestyle=":", alpha=0.5)
+
+        axes[-1][0].set_xlabel("time")
+        self.wave_figure.tight_layout()
+        self.wave_canvas.draw()
+
+    def on_wave_view_change(self):
+        mode = self.wave_view_mode.get()
+        self.wave_table_frame.grid_remove()
+        self.wave_plot_frame.grid_remove()
+        if mode == "table":
+            self.wave_table_frame.grid(row=0, column=0, sticky="nsew")
+        else:
+            self.wave_plot_frame.grid(row=0, column=0, sticky="nsew")
+            self.render_wave_plot(self._wave_rows, self._wave_columns)
 
     def write_output(self, text):
         self.output.configure(state="normal")
